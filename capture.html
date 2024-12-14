@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Extract Text from File</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.15.349/pdf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.1.1/dist/tesseract.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        #output {
+            margin-top: 20px;
+            white-space: pre-wrap;
+            border: 1px solid #ddd;
+            padding: 10px;
+            background-color: #f9f9f9;
+        }
+        #video {
+            margin-top: 20px;
+            max-width: 100%;
+            border: 1px solid #ddd;
+        }
+    </style>
+</head>
+<body>
+    <h1>Extract Text from File</h1>
+    <h2>PDF</h2>
+    <input type="file" id="pdfInput" accept="application/pdf">
+    <h2>Image</h2>
+    <input type="file" id="imageInput" accept="image/*">
+    <h2>Capture Image</h2>
+    <video id="video" autoplay></video>
+    <button id="captureButton">Capture</button>
+    <canvas id="canvas" style="display:none;"></canvas>
+    <div id="output">Upload a file or capture an image to see its text content here.</div>
+
+    <script>
+        document.getElementById('pdfInput').addEventListener('change', async (event) => {
+            const file = event.target.files[0];
+
+            if (!file || file.type !== 'application/pdf') {
+                alert('Please upload a valid PDF file.');
+                return;
+            }
+
+            const reader = new FileReader();
+
+            reader.onload = async function() {
+                const typedArray = new Uint8Array(this.result);
+
+                // Load the PDF document
+                const pdf = await pdfjsLib.getDocument(typedArray).promise;
+
+                let textContent = '';
+
+                // Loop through each page of the PDF
+                for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+                    const page = await pdf.getPage(pageNum);
+                    const text = await page.getTextContent();
+
+                    // Create a map to store text lines based on their y-coordinates
+                    const lines = {};
+
+                    text.items.forEach(item => {
+                        const y = Math.round(item.transform[5]); // Use y-coordinate for line grouping
+                        lines[y] = (lines[y] || '') + item.str;
+                    });
+
+                    // Sort lines by y-coordinate and append to textContent
+                    Object.keys(lines)
+                        .sort((a, b) => b - a) // Sort by y-coordinate (descending)
+                        .forEach(y => {
+                            textContent += lines[y] + '\n';
+                        });
+
+                    textContent += '\n'; // Add a newline between pages
+                }
+
+                // Display the extracted text
+                document.getElementById('output').textContent = textContent.trim();
+            };
+
+            reader.readAsArrayBuffer(file);
+        });
+
+        document.getElementById('imageInput').addEventListener('change', async (event) => {
+            const file = event.target.files[0];
+
+            if (!file || !file.type.startsWith('image/')) {
+                alert('Please upload a valid image file.');
+                return;
+            }
+
+            const reader = new FileReader();
+
+            reader.onload = async function() {
+                const img = new Image();
+                img.src = this.result;
+
+                img.onload = async function() {
+                    const { data: { text } } = await Tesseract.recognize(img, 'eng');
+                    document.getElementById('output').textContent = text.trim();
+                };
+            };
+
+            reader.readAsDataURL(file);
+        });
+
+        // Access the user's camera
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const captureButton = document.getElementById('captureButton');
+
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+            navigator.mediaDevices.getUserMedia({ video: true })
+                .then(stream => {
+                    video.srcObject = stream;
+                    video.play();
+                })
+                .catch(error => {
+                    console.error('Error accessing the camera:', error);
+                });
+        }
+
+        captureButton.addEventListener('click', async () => {
+            const context = canvas.getContext('2d');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            const imageData = canvas.toDataURL('image/png');
+            const img = new Image();
+            img.src = imageData;
+
+            img.onload = async function() {
+                const { data: { text } } = await Tesseract.recognize(img, 'eng');
+                document.getElementById('output').textContent = text.trim();
+            };
+        });
+    </script>
+</body>
+</html>

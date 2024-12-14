@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Finger Detection</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin: 20px;
+        }
+        video {
+            border: 1px solid #ddd;
+            max-width: 100%;
+            height: auto;
+        }
+        #output {
+            margin-top: 20px;
+            font-size: 1.5em;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h1>Live Finger Detection</h1>
+    <video id="video" autoplay></video>
+    <div id="output">Detecting...</div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.11.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/handpose"></script>
+
+    <script>
+        const video = document.getElementById('video');
+        const output = document.getElementById('output');
+
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+            navigator.mediaDevices.getUserMedia({ video: true })
+                .then(stream => {
+                    video.srcObject = stream;
+                    video.play();
+                })
+                .catch(error => {
+                    console.error('Error accessing the camera:', error);
+                    output.textContent = 'Unable to access the camera.';
+                });
+        } else {
+            output.textContent = 'Camera not supported.';
+        }
+
+        let handDetector;
+
+        async function loadModel() {
+            handDetector = await handpose.load();
+            detectHands();
+        }
+
+        async function detectHands() {
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+
+            async function detect() {
+                context.drawImage(video, 0, 0, canvas.width, canvas.height);
+                const predictions = await handDetector.estimateHands(canvas);
+
+                if (predictions.length > 0) {
+                    const landmarks = predictions[0].landmarks;
+
+                    // Count fingers based on the landmarks
+                    const fingers = [
+                        [1, 2, 3, 4], // Thumb
+                        [5, 6, 7, 8], // Index Finger
+                        [9, 10, 11, 12], // Middle Finger
+                        [13, 14, 15, 16], // Ring Finger
+                        [17, 18, 19, 20], // Pinky Finger
+                    ];
+
+                    let count = 0;
+                    fingers.forEach((finger) => {
+                        const base = landmarks[finger[0]];
+                        const tip = landmarks[finger[3]];
+
+                        // Check if the tip is above the base (indicating the finger is extended)
+                        if (tip[1] < base[1]) {
+                            count++;
+                        }
+                    });
+
+                    output.textContent = `Fingers detected: ${count}`;
+                } else {
+                    output.textContent = 'No hand detected.';
+                }
+
+                requestAnimationFrame(detect);
+            }
+
+            detect();
+        }
+
+        video.addEventListener('loadeddata', loadModel);
+    </script>
+</body>
+</html>

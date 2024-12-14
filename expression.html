@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Facial Expression Detection</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin: 20px;
+        }
+        video {
+            border: 1px solid #ddd;
+            max-width: 100%;
+            height: auto;
+        }
+        #output {
+            margin-top: 20px;
+            font-size: 1.5em;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h1>Live Facial Expression Detection</h1>
+    <video id="video" autoplay></video>
+    <div id="output">Detecting...</div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.11.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/face-landmarks-detection"></script>
+
+    <script>
+        const video = document.getElementById('video');
+        const output = document.getElementById('output');
+
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+            navigator.mediaDevices.getUserMedia({ video: true })
+                .then(stream => {
+                    video.srcObject = stream;
+                    video.play();
+                })
+                .catch(error => {
+                    console.error('Error accessing the camera:', error);
+                    output.textContent = 'Unable to access the camera.';
+                });
+        } else {
+            output.textContent = 'Camera not supported.';
+        }
+
+        let faceDetector;
+
+        async function loadModel() {
+            faceDetector = await faceLandmarksDetection.createDetector(
+                faceLandmarksDetection.SupportedModels.MediaPipeFaceMesh, 
+                { runtime: 'tfjs' }
+            );
+            detectExpressions();
+        }
+
+        async function detectExpressions() {
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+
+            async function detect() {
+                context.drawImage(video, 0, 0, canvas.width, canvas.height);
+                const predictions = await faceDetector.estimateFaces(video);
+
+                if (predictions.length > 0) {
+                    // Example: Analyze face for smile (placeholder logic)
+                    const face = predictions[0];
+                    const mouthTop = face.keypoints.find(point => point.name === 'lipsUpperOuter');
+                    const mouthBottom = face.keypoints.find(point => point.name === 'lipsLowerOuter');
+
+                    if (mouthTop && mouthBottom) {
+                        const mouthOpen = Math.abs(mouthTop.y - mouthBottom.y);
+
+                        if (mouthOpen > 20) {
+                            output.textContent = 'Expression detected: Smiling';
+                        } else {
+                            output.textContent = 'Expression detected: Neutral';
+                        }
+                    } else {
+                        output.textContent = 'Expression detected: Neutral';
+                    }
+                } else {
+                    output.textContent = 'No face detected.';
+                }
+
+                requestAnimationFrame(detect);
+            }
+
+            detect();
+        }
+
+        video.addEventListener('loadeddata', loadModel);
+    </script>
+</body>
+</html>
